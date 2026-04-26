@@ -1,37 +1,17 @@
 const CALIL_API = 'https://api.calil.jp/library';
+const NOMINATIM_API = 'https://nominatim.openstreetmap.org/search';
+const APPKEY = 'a8f2433228b319cb58bdf472b176e1d7';
 
-const apiKeySection = document.getElementById('apiKeySection');
-const searchSection = document.getElementById('searchSection');
-const apiKeyInput = document.getElementById('apiKeyInput');
-const saveApiKeyBtn = document.getElementById('saveApiKey');
-const searchBtn = document.getElementById('searchBtn');
-const changeApiKeyBtn = document.getElementById('changeApiKey');
+const keywordInput = document.getElementById('keywordInput');
+const keywordSearchBtn = document.getElementById('keywordSearchBtn');
+const geoBtn = document.getElementById('geoBtn');
 const limitSelect = document.getElementById('limitSelect');
 const statusEl = document.getElementById('status');
 const resultsEl = document.getElementById('results');
 
-function getStoredApiKey() {
-  return localStorage.getItem('calil_appkey') || '';
-}
-
-function init() {
-  const key = getStoredApiKey();
-  if (key) {
-    showSearchSection();
-  } else {
-    showApiKeySection();
-  }
-}
-
-function showApiKeySection() {
-  apiKeySection.hidden = false;
-  searchSection.hidden = true;
-  apiKeyInput.value = getStoredApiKey();
-}
-
-function showSearchSection() {
-  apiKeySection.hidden = true;
-  searchSection.hidden = false;
+function setLoading(loading) {
+  keywordSearchBtn.disabled = loading;
+  geoBtn.disabled = loading;
 }
 
 function showStatus(message, type = 'loading') {
@@ -48,55 +28,55 @@ function hideStatus() {
   statusEl.hidden = true;
 }
 
-saveApiKeyBtn.addEventListener('click', () => {
-  const key = apiKeyInput.value.trim();
-  if (!key) {
-    showStatus('APIキーを入力してください', 'error');
-    statusEl.hidden = false;
-    return;
-  }
-  localStorage.setItem('calil_appkey', key);
-  showSearchSection();
-  hideStatus();
-  resultsEl.innerHTML = '';
+keywordSearchBtn.addEventListener('click', handleKeywordSearch);
+keywordInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') handleKeywordSearch();
 });
+geoBtn.addEventListener('click', handleGeoSearch);
 
-apiKeyInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') saveApiKeyBtn.click();
-});
-
-changeApiKeyBtn.addEventListener('click', () => {
-  showApiKeySection();
-  hideStatus();
-  resultsEl.innerHTML = '';
-});
-
-searchBtn.addEventListener('click', searchNearbyLibraries);
-
-function searchNearbyLibraries() {
-  const appkey = getStoredApiKey();
-  if (!appkey) {
-    showStatus('APIキーが設定されていません', 'error');
+async function handleKeywordSearch() {
+  const query = keywordInput.value.trim();
+  if (!query) {
+    showStatus('地名を入力してください', 'error');
     return;
   }
 
+  setLoading(true);
+  resultsEl.innerHTML = '';
+  showStatus(`「${query}」の位置を検索中...`, 'loading');
+
+  try {
+    const geo = await geocodeKeyword(query);
+    if (!geo) {
+      showStatus(`「${query}」の位置が見つかりませんでした。別の地名を試してください。`, 'error');
+      setLoading(false);
+      return;
+    }
+    showStatus('図書館を検索中...', 'loading');
+    fetchLibraries(geo.lon, geo.lat, query);
+  } catch {
+    showStatus('位置情報の取得に失敗しました。しばらく後でお試しください。', 'error');
+    setLoading(false);
+  }
+}
+
+function handleGeoSearch() {
   if (!navigator.geolocation) {
     showStatus('このブラウザは位置情報に対応していません', 'error');
     return;
   }
 
-  searchBtn.disabled = true;
-  showStatus('現在地を取得中...', 'loading');
+  setLoading(true);
   resultsEl.innerHTML = '';
+  showStatus('現在地を取得中...', 'loading');
 
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      const { latitude, longitude } = pos.coords;
       showStatus('図書館を検索中...', 'loading');
-      fetchLibraries(appkey, longitude, latitude);
+      fetchLibraries(pos.coords.longitude, pos.coords.latitude, '現在地');
     },
     (err) => {
-      searchBtn.disabled = false;
+      setLoading(false);
       const msg = {
         1: '位置情報の取得が許可されていません。ブラウザの設定を確認してください。',
         2: '位置情報を取得できませんでした。',
@@ -108,12 +88,28 @@ function searchNearbyLibraries() {
   );
 }
 
-function fetchLibraries(appkey, longitude, latitude) {
+async function geocodeKeyword(query) {
+  const params = new URLSearchParams({
+    q: query,
+    format: 'json',
+    limit: '1',
+    countrycodes: 'jp',
+    'accept-language': 'ja',
+  });
+  const res = await fetch(`${NOMINATIM_API}?${params}`, {
+    headers: { 'Accept-Language': 'ja' },
+  });
+  const data = await res.json();
+  if (!data.length) return null;
+  return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+}
+
+function fetchLibraries(longitude, latitude, label) {
   const limit = limitSelect.value;
   const callbackName = 'calilCallback_' + Date.now();
 
   const params = new URLSearchParams({
-    appkey,
+    appkey: APPKEY,
     geocode: `${longitude},${latitude}`,
     limit,
     format: 'json',
@@ -123,44 +119,44 @@ function fetchLibraries(appkey, longitude, latitude) {
   const script = document.createElement('script');
   script.src = `${CALIL_API}?${params}`;
 
-  const timeout = setTimeout(() => {
+  const timer = setTimeout(() => {
     cleanup();
-    searchBtn.disabled = false;
-    showStatus('タイムアウトしました。APIキーを確認してください。', 'error');
+    setLoading(false);
+    showStatus('タイムアウトしました。しばらく後でお試しください。', 'error');
   }, 15000);
 
   function cleanup() {
     delete window[callbackName];
     script.remove();
-    clearTimeout(timeout);
+    clearTimeout(timer);
   }
 
   window[callbackName] = (data) => {
     cleanup();
-    searchBtn.disabled = false;
-    renderResults(data, latitude, longitude);
+    setLoading(false);
+    renderResults(data, latitude, longitude, label);
   };
 
   script.onerror = () => {
     cleanup();
-    searchBtn.disabled = false;
-    showStatus('APIリクエストに失敗しました。APIキーを確認してください。', 'error');
+    setLoading(false);
+    showStatus('APIリクエストに失敗しました。しばらく後でお試しください。', 'error');
   };
 
   document.head.appendChild(script);
 }
 
 const CATEGORY_LABELS = {
-  'SMALL': '小規模図書館',
-  'MEDIUM': '図書館',
-  'LARGE': '大規模図書館',
-  'UNIV': '大学図書館',
-  'CORP': '企業・機関',
+  SMALL: '小規模図書館',
+  MEDIUM: '図書館',
+  LARGE: '大規模図書館',
+  UNIV: '大学図書館',
+  CORP: '企業・機関',
 };
 
-function renderResults(libraries, userLat, userLon) {
+function renderResults(libraries, userLat, userLon, label) {
   if (!libraries || libraries.length === 0) {
-    showStatus('近くに図書館が見つかりませんでした。', 'info');
+    showStatus(`「${label}」周辺に図書館が見つかりませんでした。`, 'info');
     return;
   }
 
@@ -168,7 +164,7 @@ function renderResults(libraries, userLat, userLon) {
 
   const header = document.createElement('p');
   header.className = 'results-header';
-  header.textContent = `${libraries.length}件の図書館が見つかりました`;
+  header.textContent = `「${label}」周辺の図書館 ${libraries.length}件`;
 
   const grid = document.createElement('div');
   grid.className = 'library-grid';
@@ -178,10 +174,9 @@ function renderResults(libraries, userLat, userLon) {
     card.className = 'library-card';
 
     const [libLon, libLat] = (lib.geocode || ',').split(',').map(Number);
-    const distance = (libLat && libLon)
+    const distance = libLat && libLon
       ? calcDistance(userLat, userLon, libLat, libLon)
       : null;
-
     const categoryLabel = CATEGORY_LABELS[lib.category] || lib.category || '';
 
     card.innerHTML = `
@@ -191,9 +186,9 @@ function renderResults(libraries, userLat, userLon) {
       </div>
       ${lib.address ? `<div class="library-address">📍 ${escHtml(lib.address)}</div>` : ''}
       <div class="library-meta">
-        ${distance !== null ? `<span style="font-size:0.85rem;color:#64748b">🚶 約 ${distance} km</span>` : ''}
+        ${distance !== null ? `<span class="distance">🚶 約 ${distance} km</span>` : ''}
         ${lib.url ? `<a class="library-link" href="${escHtml(lib.url)}" target="_blank" rel="noopener">🌐 ウェブサイト</a>` : ''}
-        ${(libLat && libLon) ? `<a class="library-map-link" href="https://www.google.com/maps?q=${libLat},${libLon}" target="_blank" rel="noopener">🗺️ マップで見る</a>` : ''}
+        ${libLat && libLon ? `<a class="library-map-link" href="https://www.google.com/maps?q=${libLat},${libLon}" target="_blank" rel="noopener">🗺️ マップ</a>` : ''}
       </div>
     `;
 
@@ -223,5 +218,3 @@ function escHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
-
-init();
