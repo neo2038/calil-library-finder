@@ -1,0 +1,9 @@
+{
+  "name": "calil-library-finder",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "setup": "node scripts/generate-config.js",
+    "dev": "node scripts/generate-config.js && python3 -m http.server 8000"
+  }
+}

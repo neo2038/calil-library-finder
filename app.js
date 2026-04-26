@@ -1,6 +1,6 @@
 const CALIL_API = 'https://api.calil.jp/library';
 const NOMINATIM_API = 'https://nominatim.openstreetmap.org/search';
-const APPKEY = 'a8f2433228b319cb58bdf472b176e1d7';
+const APPKEY = window.__ENV__?.CALIL_APPKEY || '';
 
 const keywordInput = document.getElementById('keywordInput');
 const keywordSearchBtn = document.getElementById('keywordSearchBtn');
