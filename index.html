@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>近くの図書館を探す - カーリル図書館API</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📚 近くの図書館を探す</h1>
+      <p class="subtitle">現在地から近くの図書館を検索します</p>
+    </header>
+
+    <div class="api-key-section" id="apiKeySection">
+      <div class="api-key-card">
+        <h2>APIキーを設定</h2>
+        <p>
+          <a href="https://calil.jp/api/dashboard/" target="_blank" rel="noopener">カーリル図書館API</a>
+          のアプリケーションキーを入力してください。
+        </p>
+        <div class="input-row">
+          <input type="text" id="apiKeyInput" placeholder="アプリケーションキーを入力..." autocomplete="off">
+          <button id="saveApiKey">保存して検索</button>
+        </div>
+        <p class="hint">キーはブラウザのlocalStorageに保存されます（サーバーには送信されません）</p>
+      </div>
+    </div>
+
+    <div class="search-section" id="searchSection" hidden>
+      <div class="controls">
+        <div class="limit-control">
+          <label for="limitSelect">表示件数</label>
+          <select id="limitSelect">
+            <option value="5">5件</option>
+            <option value="10" selected>10件</option>
+            <option value="20">20件</option>
+          </select>
+        </div>
+        <button id="searchBtn" class="primary-btn">
+          <span class="icon">📍</span> 現在地で検索
+        </button>
+        <button id="changeApiKey" class="secondary-btn">APIキーを変更</button>
+      </div>
+    </div>
+
+    <div id="status" class="status" hidden></div>
+
+    <div id="results" class="results"></div>
+  </div>
+
+  <footer>
+    <p>
+      Powered by <a href="https://calil.jp/doc/api.html" target="_blank" rel="noopener">カーリル図書館API</a>
+    </p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
